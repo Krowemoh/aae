@@ -10,6 +10,7 @@ Simply download the AAE file and compile and catalog it in D3.
 ## Help
 
 ```
+^           Toggle Up-Arrow mode to print ASCII code of unprintable characters
 ##			Go to line
 
 P			Display 1 page
