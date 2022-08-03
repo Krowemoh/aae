@@ -1,5 +1,5 @@
 *ASI********************************************************************
-*  PRODUCTýIC2ý                                                        *
+*  PRODUCTÃ½IC2Ã½                                                        *
 *                                                                      *
 * Copyright 2022 - Asynchron Systems Inc.                              *
 *                                                                      *
@@ -174,9 +174,17 @@
                 LINE = ITEM<CURRENT.LINE>
 *
                 IF UP.CARET.MODE THEN
-                    LINE = CHANGE(ITEM<CURRENT.LINE>,@VM,'^253')
-                    LINE = CHANGE(LINE,@SVM,'^252')
-                    LINE = CHANGE(LINE,@TM,'^251')
+                    FOR CHAR.CTR = 0 TO 9
+                        LINE = CHANGE(LINE,CHAR(CHAR.CTR),'^00':CHAR.CTR)
+                    NEXT CHAR.CTR
+*
+                    FOR CHAR.CTR = 10 TO 31
+                        LINE = CHANGE(LINE,CHAR(CHAR.CTR),'^0':CHAR.CTR)
+                    NEXT CHAR.CTR
+*
+                    FOR CHAR.CTR = 127 TO 253
+                        LINE = CHANGE(LINE,CHAR(CHAR.CTR),'^':CHAR.CTR)
+                    NEXT CHAR.CTR
                 END
 *
                 PRINT CURRENT.LINE PADDING : ' ' : LINE
@@ -333,6 +341,18 @@
                     IF VALUE = '' THEN
                         EXIT
                     END
+*
+                    FOR CHAR.CTR = 0 TO 9
+                        VALUE = CHANGE(VALUE,'^00':CHAR.CTR,CHAR(CHAR.CTR))
+                    NEXT CHAR.CTR
+*
+                    FOR CHAR.CTR = 10 TO 31
+                        VALUE = CHANGE(VALUE,'^0':CHAR.CTR,CHAR(CHAR.CTR))
+                    NEXT CHAR.CTR
+*
+                    FOR CHAR.CTR = 127 TO 254
+                        VALUE = CHANGE(VALUE,'^':CHAR.CTR,CHAR(CHAR.CTR))
+                    NEXT CHAR.CTR
 *
                     ITEM = INSERT(ITEM,INSERT.AT.LINE;VALUE)
                     INSERT.AT.LINE = INSERT.AT.LINE + 1
@@ -533,9 +553,17 @@
                     LINE = ITEM<I>
 *
                     IF UP.CARET.MODE THEN
-                        LINE = CHANGE(ITEM<I>,@VM,'^253')
-                        LINE = CHANGE(LINE,@SVM,'^252')
-                        LINE = CHANGE(LINE,@TM,'^251')
+                        FOR CHAR.CTR = 0 TO 9
+                            LINE = CHANGE(LINE,CHAR(CHAR.CTR),'^00':CHAR.CTR)
+                        NEXT CHAR.CTR
+*
+                        FOR CHAR.CTR = 10 TO 31
+                            LINE = CHANGE(LINE,CHAR(CHAR.CTR),'^0':CHAR.CTR)
+                        NEXT CHAR.CTR
+*
+                        FOR CHAR.CTR = 127 TO 253
+                            LINE = CHANGE(LINE,CHAR(CHAR.CTR),'^':CHAR.CTR)
+                        NEXT CHAR.CTR
                     END
 *
                     PRINT I PADDING : ' ' : LINE
