@@ -1,4 +1,4 @@
-# Alternative Alternative Editor - v0.1
+# Alternative Alternative Editor
 
 This is a simple line editor to edit multivalue records in D3. The key function
 is the EV command which explodes out multivalue sets.
