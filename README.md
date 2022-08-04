@@ -55,6 +55,6 @@ REDO			Redo change - Move forward in the history
 EX/Q 			Exit the editor
 FI 			Save the record
 FD 			Delete the record
-SAVE name 		Save the record in the current file as name
-SAVE file name	Save the record in the specified file as name
+SAVE {name} 		Save the record in the current file as name
+SAVE {file} {name}	Save the record in the specified file as name
 ```
