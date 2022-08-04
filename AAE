@@ -1,5 +1,10 @@
+*
+* COMPILER DIRECTIVES
+*
+    $DEFINE DATABASE.UV
+    $DEFINE PLATFORM.LINUX
+*
 *ASI********************************************************************
-*  PRODUCTýIC2ý                                                        *
 *                                                                      *
 * Copyright 2022 - Asynchron Systems Inc.                              *
 *                                                                      *
@@ -67,6 +72,7 @@
 *%END
 *
     PROMPT ''
+    TAB.SIZE = 4
 *
     TOKENS = SENTENCE()
     NUMBER.OF.ARGUMENTS = DCOUNT(TOKENS,' ')
@@ -86,7 +92,7 @@
             STOP
         END
 *
-        ITEM.ID = FIELD(TOKENS,' ',3)
+        RECORD.ID = FIELD(TOKENS,' ',3)
 *
     END ELSE IF NUMBER.OF.ARGUMENTS = 4 THEN
         FILENAME = FIELD(TOKENS,' ',3)
@@ -103,33 +109,57 @@
             STOP
         END
 *
-        ITEM.ID = FIELD(TOKENS,' ',4)
+        RECORD.ID = FIELD(TOKENS,' ',4)
     END
 *
-    IF ITEM.ID = '' THEN
+    OPEN '','MD' TO MD.FILE ELSE
+        PRINT 'Unable to open file:  - Press RETURN':
+        INPUT ANYTHING
+        STOP
+    END
+*
+* SET FILETYPE
+*
+    READ ANYTHING FROM MD.FILE,FILENAME:'.O' THEN
+        FILETYPE = 'BASIC'
+    END ELSE IF FILENAME = 'BP' OR FILENAME = 'MPROCLIB' THEN
+        FILETYPE = 'BASIC'
+    END ELSE IF LINES<1> = 'PQ' THEN
+        FILETYPE = 'PROC'
+    END ELSE
+        FILETYPE = 'DATA'
+    END
+*
+    ARCHIVE.FILENAME = 'ARCHIVE-' : FILENAME
+    ARCHIVE.OPENED = FALSE
+    OPEN '', ARCHIVE.FILENAME TO ARCHIVE.FILE THEN
+        ARCHIVE.OPENED = TRUE
+    END
+*
+    IF RECORD.ID = '' THEN
         PRINT 'Missing record id - Press Return':
         INPUT ANYTHING
         STOP
     END
 *
-    READU ITEM FROM FILE,ITEM.ID LOCKED
-        PRINT ITEM.ID : ' is locked.'
+    READU LINES FROM FILE,RECORD.ID LOCKED
+        PRINT RECORD.ID : ' is locked.'
         STOP
 *
     END THEN
-        TOTAL.LINES = DCOUNT(ITEM,@AM)
-        PRINT 'Opened ' : ITEM.ID : '.'
+        TOTAL.LINES = DCOUNT(LINES,@AM)
+        PRINT 'Opened ' : RECORD.ID : '.'
         PRINT TOTAL.LINES : ' lines/fields in this record.'
         PRINT
 *
     END ELSE
         PRINT 'New record.'
         PRINT
-        ITEM = ''
+        LINES = ''
     END
 *
     UP.CARET.MODE = FALSE
-    OLD.ITEM = ITEM
+    ORIGINAL.LINES = LINES
 *
     CURRENT.LINE = 0
     CURRENT.LINE.STACK = ''
@@ -146,7 +176,7 @@
     VALUE = ''
 *
     LOOP WHILE TRUE DO
-        TOTAL.LINES = DCOUNT(ITEM,@AM)
+        TOTAL.LINES = DCOUNT(LINES,@AM)
         PROMPT.LENGTH = LEN(TOTAL.LINES)
         IF PROMPT.LENGTH < 4 THEN
             PROMPT.LENGTH = 4
@@ -163,7 +193,7 @@
                 IF CURRENT.LINE > TOTAL.LINES THEN
                     CURRENT.LINE = TOTAL.LINES
                 END
-                PRINT CURRENT.LINE PADDING : ' ' : ITEM<CURRENT.LINE>
+                PRINT CURRENT.LINE PADDING : ' ' : LINES<CURRENT.LINE>
 *
             CASE NUM(VALUE)
                 CURRENT.LINE = VALUE
@@ -171,7 +201,7 @@
                     CURRENT.LINE = TOTAL.LINES
                 END
 *
-                LINE = ITEM<CURRENT.LINE>
+                LINE = LINES<CURRENT.LINE>
 *
                 IF UP.CARET.MODE THEN
                     FOR CHAR.CTR = 0 TO 9
@@ -189,26 +219,58 @@
 *
                 PRINT CURRENT.LINE PADDING : ' ' : LINE
 *
+            CASE OCONV(VALUE,'MCU') = 'FORMAT'
+                GOSUB FORMAT.FILE
+                PRINT 'Formatted file.'
+*
+            CASE OCONV(VALUE,'MCU') = 'ARCHIVE'
+                IF ARCHIVE.OPENED THEN
+                    ARCHIVE.DATE = OCONV(DATE(),'D')
+                    CONVERT ' ' TO '' IN ARCHIVE.DATE
+*
+                    ID.OK = FALSE
+                    SEQ = 0
+                    LOOP
+                        $IFDEF DATABASE.UV
+                            ARCHIVE.ID = ARCHIVE.DATE : '*' : RECORD.ID
+                        $ENDIF
+                        $IFDEF DATABASE.D3
+                            ARCHIVE.ID = FILENAME : '*' : ARCHIVE.DATE : '*' : RECORD.ID
+                        $ENDIF
+                        IF SEQ # 0 THEN ARCHIVE.ID = ARCHIVE.ID : '*' : SEQ
+                        READV ANYTHING FROM ARCHIVE.FILE, ARCHIVE.ID, 1 ELSE ID.OK = TRUE
+                    UNTIL ID.OK DO
+                        SEQ = SEQ + 1
+                    REPEAT
+*
+                    WRITE LINES ON ARCHIVE.FILE, ARCHIVE.ID
+*
+                    PRINT 'Archived in ' : ARCHIVE.FILENAME : ' as ' : ARCHIVE.ID :'.'
+*
+                END ELSE
+                    PRINT 'Unable to archive.'
+                END
+*
             CASE OCONV(VALUE,'MCU')[1,4] = 'LOAD'
                 FILE.TYPE = ''
                 NUMBER.OF.ARGUMENTS = DCOUNT(VALUE,' ')
 *
                 IF NUMBER.OF.ARGUMENTS = 2 THEN
                     LOAD.FILENAME = FILENAME
-                    LOAD.ITEM.ID = FIELD(VALUE,' ',2)
+                    LOAD.RECORD.ID = FIELD(VALUE,' ',2)
 *
                 END ELSE IF NUMBER.OF.ARGUMENTS = 3 THEN
                     LOAD.FILENAME = FIELD(VALUE,' ',2)
-                    LOAD.ITEM.ID = FIELD(VALUE,' ',3)
+                    LOAD.RECORD.ID = FIELD(VALUE,' ',3)
 *
                 END ELSE IF NUMBER.OF.ARGUMENTS = 4 THEN
                     LOAD.FILENAME = FIELD(VALUE,' ',3)
-                    LOAD.ITEM.ID = FIELD(VALUE,' ',4)
+                    LOAD.RECORD.ID = FIELD(VALUE,' ',4)
                     FILE.TYPE = 'DICT'
                 END
 *
                 OPEN FILE.TYPE,LOAD.FILENAME TO LOAD.FILE THEN
-                    READ LOAD.ITEM FROM LOAD.FILE,LOAD.ITEM.ID THEN
+                    READ LOAD.ITEM FROM LOAD.FILE,LOAD.RECORD.ID THEN
                         PRINT 'Starting line/field number: ' :
                         INPUT LOAD.START
                         PRINT 'Ending line/field number: ' :
@@ -228,21 +290,11 @@
                             INSERT.AT.LINE = CURRENT.LINE + 1
                         END
 *
-                        IF NEST.LEVEL = 0 THEN
-                            FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                                HISTORY = DELETE(HISTORY,HIST.CTR)
-                                HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                            NEXT HIST.CTR
-                            TEMP.ITEM = ITEM
-                            CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                            HISTORY<HISTORY.POS> = TEMP.ITEM
-                            HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                            HISTORY.POS = HISTORY.POS + 1
-                        END
+                        GOSUB PUSH.HISTORY
 *
                         LINE.COUNTER = 0
                         FOR I = LOAD.START TO LOAD.END
-                            ITEM = INSERT(ITEM,INSERT.AT.LINE;LOAD.ITEM<I>)
+                            LINES = INSERT(LINES,INSERT.AT.LINE;LOAD.ITEM<I>)
                             INSERT.AT.LINE = INSERT.AT.LINE + 1
                             LINE.COUNTER = LINE.COUNTER + 1
                         NEXT I
@@ -250,7 +302,7 @@
                         PRINT LINE.COUNTER : ' lines/fields loaded.'
 *
                     END ELSE
-                        PRINT 'Unable to open record: ' : LOAD.ITEM.ID : ' - Press RETURN':
+                        PRINT 'Unable to open record: ' : LOAD.RECORD.ID : ' - Press RETURN':
                     END
                 END ELSE
                     PRINT 'Unable to open file: ' : LOAD.FILENAME :' - Press RETURN':
@@ -261,13 +313,13 @@
                 PRINT 'Exploding line ' : CURRENT.LINE : '.'
                 NEST.LEVEL = NEST.LEVEL + 1
 *
-                TEMP.ITEM = ITEM
+                TEMP.ITEM = LINES
                 CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
                 ITEM.STACK<NEST.LEVEL> = TEMP.ITEM
                 CURRENT.LINE.STACK<NEST.LEVEL> = CURRENT.LINE
 *
-                ITEM = ITEM<CURRENT.LINE>
-                CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN ITEM
+                LINES = LINES<CURRENT.LINE>
+                CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN LINES
                 CURRENT.LINE = 1
 *
             CASE VALUE = '^'
@@ -280,17 +332,7 @@
                 END
 *
             CASE OCONV(VALUE,'MCU')[1,1] = 'A'
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
                 VALUE = VALUE[2,9999]
 *
@@ -310,23 +352,13 @@
                     LINES.TO.APPEND.TO = CURRENT.LINE + APPEND.LINES - 1
 *
                     FOR I = CURRENT.LINE TO LINES.TO.APPEND.TO
-                        ITEM<I> = ITEM<I> : VALUE[INDEX(VALUE,APPEND.STRING,1),9999]
-                        PRINT I PADDING : ' ' : ITEM<I>
+                        LINES<I> = LINES<I> : VALUE[INDEX(VALUE,APPEND.STRING,1),9999]
+                        PRINT I PADDING : ' ' : LINES<I>
                     NEXT I
                 END
 *
             CASE OCONV(VALUE,'MCU') = 'I'
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
                 IF TOTAL.LINES = 0 THEN
                     INSERT.AT.LINE = 1
@@ -354,24 +386,14 @@
                         VALUE = CHANGE(VALUE,'^':CHAR.CTR,CHAR(CHAR.CTR))
                     NEXT CHAR.CTR
 *
-                    ITEM = INSERT(ITEM,INSERT.AT.LINE;VALUE)
+                    LINES = INSERT(LINES,INSERT.AT.LINE;VALUE)
                     INSERT.AT.LINE = INSERT.AT.LINE + 1
 *
-                    TOTAL.LINES = DCOUNT(ITEM,@AM)
+                    TOTAL.LINES = DCOUNT(LINES,@AM)
                 REPEAT
 *
             CASE OCONV(VALUE,'MCU')[1,2] = 'DE'
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
                 NUM.DELETE.LINES = VALUE[3,9999]
 *
@@ -384,7 +406,7 @@
                 END
 *
                 FOR I = 1 TO NUM.DELETE.LINES
-                    ITEM = DELETE(ITEM,CURRENT.LINE)
+                    LINES = DELETE(LINES,CURRENT.LINE)
                 NEXT I
 *
             CASE OCONV(VALUE,'MCU') = 'T'
@@ -404,17 +426,7 @@
                 PRINT 'Block ended at line ' : CURRENT.LINE : '.'
 *
             CASE OCONV(VALUE,'MCU')[1,4] = 'COPY'
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
                 POSSIBLE.BLOCK.START = FIELD(VALUE,' ',2)
                 IF POSSIBLE.BLOCK.START # '' AND NUM(POSSIBLE.BLOCK.START) THEN
@@ -438,7 +450,7 @@
 *
                     INSERT.AT.LINE = CURRENT.LINE + 1
                     FOR I = BLOCK.START TO BLOCK.END
-                        ITEM = INSERT(ITEM,INSERT.AT.LINE;ITEM<I>)
+                        LINES = INSERT(LINES,INSERT.AT.LINE;LINES<I>)
                         INSERT.AT.LINE = INSERT.AT.LINE + 1
                     NEXT I
 *
@@ -446,17 +458,7 @@
                 END
 *
             CASE OCONV(VALUE,'MCU')[1,4] = 'DROP'
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
                 POSSIBLE.BLOCK.START = FIELD(VALUE,' ',2)
                 IF POSSIBLE.BLOCK.START # '' AND NUM(POSSIBLE.BLOCK.START) THEN
@@ -480,7 +482,7 @@
 *
                     DELETE.AT.LINE = BLOCK.START
                     FOR I = BLOCK.START TO BLOCK.END
-                        ITEM = DELETE(ITEM,BLOCK.START)
+                        LINES = DELETE(LINES,BLOCK.START)
                     NEXT I
 *
                     PRINT 'Dropped lines from ' : BLOCK.START : ' to ' : BLOCK.END : '.'
@@ -513,8 +515,8 @@
                     CTR = CTR + 1
                     SEARCHED.LINES = SEARCHED.LINES + 1
                 UNTIL SEARCH.DONE DO
-                    IF INDEX(ITEM<CTR>,NEEDLE,1) THEN
-                        PRINT CTR PADDING : ' ' : ITEM<CTR>
+                    IF INDEX(LINES<CTR>,NEEDLE,1) THEN
+                        PRINT CTR PADDING : ' ' : LINES<CTR>
                         SEARCH.RESULTS = SEARCH.RESULTS + 1
                         IF SEARCH.RESULTS >= SEARCH.QUANTITY THEN
                             SEARCH.DONE = TRUE
@@ -550,7 +552,7 @@
                     START.POS = CURRENT.LINE
                 END
                 FOR I = START.POS TO ENDING.LINE.NUMBER
-                    LINE = ITEM<I>
+                    LINE = LINES<I>
 *
                     IF UP.CARET.MODE THEN
                         FOR CHAR.CTR = 0 TO 9
@@ -577,8 +579,8 @@
                     INPUT ANS
 *
                     IF OCONV(ANS,'MCU') = 'Y' THEN
-                        ITEM = ITEM.STACK<NEST.LEVEL>
-                        CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN ITEM
+                        LINES = ITEM.STACK<NEST.LEVEL>
+                        CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN LINES
                         CURRENT.LINE = CURRENT.LINE.STACK<NEST.LEVEL>
 *
                         ITEM.STACK<NEST.LEVEL> = ''
@@ -588,7 +590,7 @@
                         PRINT 'Left exploded line without saving.'
                     END
                 END ELSE
-                    IF ITEM # OLD.ITEM THEN
+                    IF LINES # ORIGINAL.LINES THEN
                         PRINT 'There are unsaved changes. Do you want to exit? (y/n) ':
                         INPUT ANS
                         IF OCONV(ANS,'MCU') = 'Y' THEN
@@ -602,14 +604,14 @@
 *
             CASE OCONV(VALUE,'MCU') = 'FI'
                 IF NEST.LEVEL # 0 THEN
-                    ROW = ITEM
+                    ROW = LINES
                     CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN ROW
 *
-                    ITEM = ITEM.STACK<NEST.LEVEL>
-                    CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN ITEM
+                    LINES = ITEM.STACK<NEST.LEVEL>
+                    CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN LINES
 *
                     CURRENT.LINE = CURRENT.LINE.STACK<NEST.LEVEL>
-                    ITEM<CURRENT.LINE> = ROW
+                    LINES<CURRENT.LINE> = ROW
 *
                     ITEM.STACK<NEST.LEVEL> = ''
                     CURRENT.LINE.STACK<NEST.LEVEL> = ''
@@ -618,8 +620,8 @@
                     PRINT 'Saved exploded line and left explosion.'
 *
                 END ELSE
-                    WRITE ITEM ON FILE,ITEM.ID
-                    PRINT 'Saved ' : ITEM.ID : '.'
+                    WRITE LINES ON FILE,RECORD.ID
+                    PRINT 'Saved ' : RECORD.ID : '.'
                     EXIT
                 END
 *
@@ -627,7 +629,7 @@
                 PRINT 'You are trying to delete the entire record. Are you sure? (y/n) ' :
                 INPUT ANS
                 IF ANS = 'Y' THEN
-                    DELETE FILE,ITEM.ID
+                    DELETE FILE,RECORD.ID
                     PRINT 'Record was deleted.'
                     EXIT
                 END
@@ -642,27 +644,27 @@
 *
                     IF NUMBER.OF.ARGUMENTS = 2 THEN
                         SAVE.FILENAME = FILENAME
-                        SAVE.ITEM.ID = FIELD(VALUE,' ',2)
+                        SAVE.RECORD.ID = FIELD(VALUE,' ',2)
 *
                     END ELSE IF NUMBER.OF.ARGUMENTS = 3 THEN
                         SAVE.FILENAME = FIELD(VALUE,' ',2)
-                        SAVE.ITEM.ID = FIELD(VALUE,' ',3)
+                        SAVE.RECORD.ID = FIELD(VALUE,' ',3)
                     END
 *
                     OPEN '',SAVE.FILENAME TO SAVE.FILE THEN
-                        READU SAVE.ITEM FROM SAVE.FILE,SAVE.ITEM.ID LOCKED
-                            PRINT 'Unabled to save ' : SAVE.ITEM.ID : ', item is locked.'
+                        READU SAVE.ITEM FROM SAVE.FILE,SAVE.RECORD.ID LOCKED
+                            PRINT 'Unabled to save ' : SAVE.RECORD.ID : ', item is locked.'
 *
                         END THEN
-                            PRINT 'Are you sure you want to overwrite ' : SAVE.ITEM.ID '? (y/n)' :
+                            PRINT 'Are you sure you want to overwrite ' : SAVE.RECORD.ID '? (y/n)' :
                             INPUT ANS
                             IF ANS = 'Y' THEN
-                                WRITE ITEM ON SAVE.FILE,SAVE.ITEM.ID
-                                PRINT 'Saved ' : SAVE.ITEM.ID : ' in ' : SAVE.FILENAME : '.'
+                                WRITE LINES ON SAVE.FILE,SAVE.RECORD.ID
+                                PRINT 'Saved ' : SAVE.RECORD.ID : ' in ' : SAVE.FILENAME : '.'
                             END
                         END ELSE
-                            WRITE ITEM ON SAVE.FILE,SAVE.ITEM.ID
-                            PRINT 'Saved ' : SAVE.ITEM.ID : ' in ' : SAVE.FILENAME : '.'
+                            WRITE LINES ON SAVE.FILE,SAVE.RECORD.ID
+                            PRINT 'Saved ' : SAVE.RECORD.ID : ' in ' : SAVE.FILENAME : '.'
                         END
                     END ELSE
                         PRINT 'Unable to open file ' : SAVE.FILENAME : ' for saving.'
@@ -675,7 +677,7 @@
 *
                 END ELSE
                     IF HISTORY.POS-1 >= DCOUNT(HISTORY,@AM) THEN
-                        TEMP.ITEM = ITEM
+                        TEMP.ITEM = LINES
                         CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
                         HISTORY<HISTORY.POS> = TEMP.ITEM
                     END
@@ -684,7 +686,7 @@
 *
                     TEMP.ITEM = HISTORY<HISTORY.POS>
                     CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN TEMP.ITEM
-                    ITEM = TEMP.ITEM
+                    LINES = TEMP.ITEM
 *
                     PRINT 'Undo: ' : HISTORY.COMMENTS<HISTORY.POS>
                     PRINT 'Rolled back 1 change. (' : HISTORY.POS : '/' : DCOUNT(HISTORY,@AM) : ')'
@@ -699,7 +701,7 @@
 *
                     TEMP.ITEM = HISTORY<HISTORY.POS>
                     CONVERT @VM:@SVM:@TM TO @AM:@VM:@SVM IN TEMP.ITEM
-                    ITEM = TEMP.ITEM
+                    LINES = TEMP.ITEM
 *
                     PRINT 'Redo: ' : HISTORY.COMMENTS<HISTORY.POS-1>
                     PRINT 'Rolled forward 1 change. (' : HISTORY.POS : '/' : DCOUNT(HISTORY,@AM) : ')'
@@ -716,33 +718,13 @@
                 NEXT I
 *
             CASE OCONV(VALUE,'MCU')[1,2] = 'R '
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
-                ITEM<CURRENT.LINE> = VALUE[3,9999]
-                PRINT CURRENT.LINE PADDING : ' ' : ITEM<CURRENT.LINE>
+                LINES<CURRENT.LINE> = VALUE[3,9999]
+                PRINT CURRENT.LINE PADDING : ' ' : LINES<CURRENT.LINE>
 *
             CASE OCONV(VALUE,'MCU')[1,1] = 'R'
-                IF NEST.LEVEL = 0 THEN
-                    FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
-                        HISTORY = DELETE(HISTORY,HIST.CTR)
-                        HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
-                    NEXT HIST.CTR
-                    TEMP.ITEM = ITEM
-                    CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
-                    HISTORY<HISTORY.POS> = TEMP.ITEM
-                    HISTORY.COMMENTS<HISTORY.POS> =  VALUE
-                    HISTORY.POS = HISTORY.POS + 1
-                END
+                GOSUB PUSH.HISTORY
 *
                 DELIMITER = VALUE[2,1]
                 NEEDLE = FIELD(VALUE,DELIMITER,2)
@@ -758,11 +740,11 @@
                 END
 *
                 IF NEEDLE = '' THEN
-                    ITEM<CURRENT.LINE> = NEW.VALUE : ITEM<CURRENT.LINE>
+                    LINES<CURRENT.LINE> = NEW.VALUE : LINES<CURRENT.LINE>
                 END ELSE
-                    ITEM<CURRENT.LINE> = CHANGE(ITEM<CURRENT.LINE>,NEEDLE,NEW.VALUE,OCCURANCES)
+                    LINES<CURRENT.LINE> = CHANGE(LINES<CURRENT.LINE>,NEEDLE,NEW.VALUE,OCCURANCES)
                 END
-                PRINT CURRENT.LINE PADDING : ' ' : ITEM<CURRENT.LINE>
+                PRINT CURRENT.LINE PADDING : ' ' : LINES<CURRENT.LINE>
 *
             CASE TRUE
                 NULL
@@ -770,7 +752,92 @@
         END CASE
     REPEAT
 *
-    RELEASE FILE,ITEM.ID
+    RELEASE FILE,RECORD.ID
+*
+    STOP
+*
+*********************  S U B R O U T I N E  *********************
+*
+    PUSH.HISTORY:NULL
+*
+    IF NEST.LEVEL = 0 THEN
+        FOR HIST.CTR = HISTORY.POS TO DCOUNT(HISTORY,@AM)
+            HISTORY = DELETE(HISTORY,HIST.CTR)
+            HISTORY.COMMENTS = DELETE(HISTORY.COMMENTS,HIST.CTR)
+        NEXT HIST.CTR
+        TEMP.ITEM = LINES
+        CONVERT @AM:@VM:@SVM TO @VM:@SVM:@TM IN TEMP.ITEM
+        HISTORY<HISTORY.POS> = TEMP.ITEM
+        HISTORY.COMMENTS<HISTORY.POS> =  VALUE
+        HISTORY.POS = HISTORY.POS + 1
+    END
+*
+    RETURN
+*
+    
+*********************  S U B R O U T I N E  *********************
+*
+    FORMAT.FILE:NULL
+*
+    GOSUB PUSH.HISTORY
+*
+    FIRST.WORDS.INC = 'FOR,CASE,$IFDEF'
+    CONVERT ',' TO @AM IN FIRST.WORDS.INC
+*
+    LAST.WORDS.INC = 'THEN,ELSE,LOCKED,DO,LOOP'
+    CONVERT ',' TO @AM IN LAST.WORDS.INC
+*
+    FIRST.WORDS.DEC = 'END,WHILE,UNTIL,REPEAT,CASE,NEXT,$ENDIF'
+    CONVERT ',' TO @AM IN FIRST.WORDS.DEC
+*
+    FMT.LINES = ''
+    INDENT.LEVEL = 1
+*
+    NUMBER.OF.LINES = DCOUNT(LINES,@AM)
+*
+    FOR FMT.CTR = 1 TO NUMBER.OF.LINES
+        TRIMMED.LINE = TRIMB(TRIMF(LINES<FMT.CTR>))
+*
+        IF TRIMMED.LINE[1,1] = '*' THEN
+            FMT.LINES<FMT.CTR> = TRIMMED.LINE
+            CONTINUE
+        END
+*
+        FIRST.WORD = FIELD(TRIMMED.LINE,' ',1)
+        LAST.WORD = FIELD(TRIMMED.LINE,' ',DCOUNT(TRIMMED.LINE,' '))
+*
+        IF TRIMMED.LINE = 'END CASE' THEN
+            INDENT.LEVEL = INDENT.LEVEL - 2
+            IF INDENT.LEVEL = 0 THEN INDENT.LEVEL = 1
+*
+        END ELSE
+            LOCATE(FIRST.WORD,FIRST.WORDS.DEC;LAST.ANYPOS) THEN
+                INDENT.LEVEL = INDENT.LEVEL - 1
+                IF INDENT.LEVEL = 0 THEN INDENT.LEVEL = 1
+            END
+        END
+*
+        FMT.LINE = SPACE(INDENT.LEVEL * TAB.SIZE) : TRIMMED.LINE
+        FMT.LINES<FMT.CTR> = FMT.LINE
+*
+        LOCATE(LAST.WORD,LAST.WORDS.INC;LAST.ANYPOS) THEN
+            LOCATE(FIRST.WORD,FIRST.WORDS.INC;ANYPOS) ELSE
+                INDENT.LEVEL = INDENT.LEVEL + 1
+            END
+        END
+*
+        LOCATE(FIRST.WORD,FIRST.WORDS.INC;ANYPOS) THEN
+            INDENT.LEVEL = INDENT.LEVEL + 1
+        END
+*
+        IF TRIMMED.LINE = 'BEGIN CASE' THEN
+            INDENT.LEVEL = INDENT.LEVEL + 2
+        END
+    NEXT FMT.CTR
+*
+    LINES = FMT.LINES
+*
+    RETURN
 *
 * END OF PROGRAM.
 *

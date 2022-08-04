@@ -13,6 +13,9 @@ Simply download the AAE file and compile and catalog it in D3.
 ^           Toggle Up-Arrow mode to print ASCII code of unprintable characters
 ##			Go to line
 
+ARCHIVE     Archive a record if ARCHIVE-{FILENAME} exists
+FORMAT      Format a file
+
 P			Display 1 page
 T 			Go to top
 B 			Go to bottom
